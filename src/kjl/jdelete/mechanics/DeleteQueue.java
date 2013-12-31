@@ -36,9 +36,7 @@ public class DeleteQueue {
                     log.append(        "Error: file doesn't exist : "+f+"\n");
                 } else {
                     try {
-//                        System.out.println("cmd /c sdelete "+flags+" \""+f.getCanonicalPath()+"\"");
-                        Process p=Runtime.getRuntime().exec(//"cmd /c dir");
-                             "cmd /c sdelete "+flags+" \""+f.getCanonicalPath()+"\"");
+                        Process p=Runtime.getRuntime().exec("cmd /c sdelete "+flags+" \""+f.getCanonicalPath()+"\"");
                         if(p.waitFor() != 0){
                             log.append("Error: deleting file      : "+f+"\n");
                         }
