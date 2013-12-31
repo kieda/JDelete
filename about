@@ -1,0 +1,7 @@
+notice : This library was written for windows, due to the nature of the sdelete function
+
+In order to run this properly, you must put sdelete (version 1.51) in the main directory
+
+This program also uses the "FileDrop" library (see http://iharder.sourceforge.net/current/java/filedrop/), which is not found in this project (download it and put it in yourself you dingus)
+
+Then, simply drag 'n drop a list of files to remove permanently. Select the ones you want to delete then press "delete", or delete all of the files on the list by pressing "Delete All". Remove items from the current list by the "remove" button.
