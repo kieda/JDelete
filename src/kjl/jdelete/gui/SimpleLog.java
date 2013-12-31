@@ -1,4 +1,4 @@
-package gui;
+package kjl.jdelete.gui;
 
 /**
  * @author zkieda

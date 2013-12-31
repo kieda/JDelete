@@ -1,12 +1,12 @@
-package gui;
+package kjl.jdelete.gui;
 
 import java.io.File;
 import java.util.Arrays;
 import javax.swing.BoundedRangeModel;
 import javax.swing.DefaultBoundedRangeModel;
 import javax.swing.DefaultListModel;
-import mech.DelList;
-import mech.DeleteQueue;
+import kjl.jdelete.mechanics.DelList;
+import kjl.jdelete.mechanics.DeleteQueue;
 import org.filedrop.FileDrop;
 
 /**

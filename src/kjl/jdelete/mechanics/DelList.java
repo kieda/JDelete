@@ -1,4 +1,4 @@
-package mech;
+package kjl.jdelete.mechanics;
 
 import java.io.File;
 import java.util.ArrayList;

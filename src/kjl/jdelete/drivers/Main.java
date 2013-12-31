@@ -1,6 +1,6 @@
-package drivers;
+package kjl.jdelete.drivers;
 
-import gui.Frame;
+import kjl.jdelete.gui.Frame;
 import java.awt.EventQueue;
 import javax.swing.UnsupportedLookAndFeelException;
 

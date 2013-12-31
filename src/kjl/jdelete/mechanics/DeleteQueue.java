@@ -1,6 +1,6 @@
-package mech;
+package kjl.jdelete.mechanics;
 
-import gui.SimpleLog;
+import kjl.jdelete.gui.SimpleLog;
 import java.io.File;
 import java.util.ArrayDeque;
 import java.util.Collections;
