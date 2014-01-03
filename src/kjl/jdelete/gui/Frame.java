@@ -5,15 +5,29 @@ import java.util.Arrays;
 import javax.swing.BoundedRangeModel;
 import javax.swing.DefaultBoundedRangeModel;
 import javax.swing.DefaultListModel;
+import javax.swing.JFrame;
 import kjl.jdelete.mechanics.DelList;
-import kjl.jdelete.mechanics.DeleteQueue;
+import kjl.jdelete.mechanics.DelQueue;
 import org.filedrop.FileDrop;
 
 /**
- *
+ * The gui/frame implementation for JDelete. I didn't feel like separating the
+ * frontend and backend at the time very much so I guess I'm stuck with this.
+ * Ok I guess
+ * 
  * @author zkieda
+ * @since when did I start commenting code?
  */
-public class Frame extends javax.swing.JFrame {
+public class Frame extends JFrame {
+    /**
+     * should this program stop? If true, this program exits. 
+     */
+    private boolean stop = false;
+    
+    /**
+     * a basic logger that logs information to the JTextArea at the bottom
+     * of the panel
+     */
     private SimpleLog logger = new SimpleLog() {
         @Override
         public void append(String s) {
@@ -24,52 +38,31 @@ public class Frame extends javax.swing.JFrame {
             outputTextArea.setText("");
         }
     };
-    private final DeleteQueue dq = new DeleteQueue(logger);
-    private final DelList list = new DelList(dq);
-    private final DefaultListModel lm = new DefaultListModel();
-
-    private void add(File f){
-        list.add(f);
-        lm.addElement(f);
-    }
-    private void rem(int[] is) {
-        Arrays.sort(is);
-        list.rem(is);
-        for(int i = is.length-1; i >= 0; i--)
-            lm.remove(is[i]);
-    }
-    private void del(int[] is) {
-        Arrays.sort(is);
-        list.del(is);
-        for(int i = is.length-1; i >= 0; i--)
-            lm.remove(is[i]);
-    }
-    private void delAll() {
-        list.delAll();
-        lm.removeAllElements();
-    }
-    private void close(){
-        stop = true;
-    }
-    private void applyFlags(){
-        dq.setFlags(flagTextField.getText());
-    }
+    
     /**
-     * Creates new form Frame
+     * the queue of things that we should delete. We send error messages about
+     * deletions to the JTextArea
      */
-    public Frame() {
-        initComponents();
-        applyFlags();
-        new FileDrop(delList, new FileDrop.Listener() {
-            @Override
-            public void filesDropped(File[] files) {
-                for (int i = 0; i < files.length; i++) {
-                    add(files[i]);
-                }
-            }
-        });
-        new Thread(painter).start();
-    }
+    private final DelQueue delQueue = new DelQueue(logger);
+    
+    /**
+     * the list of things that could possibly be deleted. This list is like the
+     * 'recycling bin' - we have an option to remove an item on this list from
+     * deletion, but deleting an item from this list prevents it from being 
+     * recovered - it is in the queue for deletion.
+     */
+    private final DelList delList = new DelList(delQueue);
+    
+    /**
+     * this is the list model we use to represent all of the items that are in
+     * the list for deletion. Invariant : each element in {@code list} has a
+     * representative element in {@code listModel}.
+     */
+    private final DefaultListModel listModel = new DefaultListModel();
+
+    /**
+     * a runnable used to repaint this frame.
+     */
     private final Runnable painter = new Runnable() {
         @Override
         public void run() {
@@ -79,20 +72,122 @@ public class Frame extends javax.swing.JFrame {
                 Thread.currentThread().sleep(100);
             }
             } catch (InterruptedException e) {}
-            dq.close();
+            delQueue.close();
         }
     };
-    private boolean stop = false;
-    private final BoundedRangeModel bmr = new DefaultBoundedRangeModel(){
+    
+    /**
+     * the range model used for the progress bar
+     */
+    private final BoundedRangeModel progressModel = new DefaultBoundedRangeModel(){
         @Override
         public int getValue() {
-            return (int)dq.percentComplete();
+            //represent the percentage of files we've deleted. 
+            return (int)(100*delQueue.amountComplete());
         }
         @Override
         public boolean getValueIsAdjusting() {
             return false;
         }
     };
+    
+    /**
+     * Adds a file for the list in the recycling bin. Updates the ui 
+     * representation as well as the back-end. An item in the recycling
+     * bin can subsequently be deleted permanently, or removed from the 
+     * recycling bin. <br>
+     * 
+     * The recycling bin is backed by {@code delList}. 
+     * @param f The file to put in the recycling bin
+     */
+    private void add(File f){
+        delList.add(f);
+        listModel.addElement(f);
+    }
+    
+    /**
+     * Removes a series of indices from the recycling bin. Updates the ui 
+     * representation as well as the back-end representation. The indices of
+     * elements in the recycling bin are updated as well, as the recycling bin
+     * is represented as an array of items to be deleted. 
+     * 
+     * @param is For each {@code i} in {@code is}, the file in the recycling bin
+     * at index {@code i} is removed from the recycling bin.
+     */
+    private void rem(int[] is) {
+        //who the hell uses asserts these days?
+        assert is != null;
+        
+        //sort the indices first for removal 
+        Arrays.sort(is);
+        
+        //remove indices from list representation
+        delList.rem(is);
+        
+        //remove indices from front end.
+        for(int i = is.length-1; i >= 0; i--)
+            listModel.remove(is[i]);
+    }
+    /**
+     * Sends a series of files in the recycling bin to the queue for deletion.
+     * Removes files from ui, and removes element from backend representation
+     * of the recycle bin. 
+     * 
+     * @param is For each {@code i} in {@code is}, the file in the recycling bin
+     * at index {@code i} is queued for permanent deletion.
+     */
+    private void del(int[] is) {
+        Arrays.sort(is);
+        delList.del(is);
+        for(int i = is.length-1; i >= 0; i--)
+            listModel.remove(is[i]);
+    }
+    
+    /**
+     * Sends all of the elements in the recycling bin to the queue for 
+     * permanent deletion. Updates the ui as well. 
+     */
+    private void delAll() {
+        delList.delAll();
+        listModel.removeAllElements();
+    }
+    
+    /**
+     * closes this frame, and eventually all of the other relevant information.
+     */
+    private void close(){
+        stop = true;
+    }
+    
+    /**
+     * sets the flags that should be used as command line arguments.
+     */
+    private void applyFlags(){
+        delQueue.setFlags(flagTextField.getText());
+    }
+    
+    /**
+     * Creates new form Frame
+     */
+    public Frame() {
+        initComponents();
+        
+        //we apply any default flags. 
+        applyFlags();
+        
+        //we prepare the recycleBinList for drag n' drop
+        new FileDrop(recycleBinList, new FileDrop.Listener() {
+            @Override
+            public void filesDropped(File[] files) {
+                for (int i = 0; i < files.length; i++) {
+                    add(files[i]);
+                }
+            }
+        });
+        
+        //start the painter thread
+        new Thread(painter).start();
+    }
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -102,18 +197,18 @@ public class Frame extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jScrollPane1 = new javax.swing.JScrollPane();
-        delList = new javax.swing.JList();
-        jProgressBar1 = new javax.swing.JProgressBar();
-        jScrollPane2 = new javax.swing.JScrollPane();
+        listScrollPane = new javax.swing.JScrollPane();
+        recycleBinList = new javax.swing.JList();
+        progressBar = new javax.swing.JProgressBar();
+        outputScrollPane = new javax.swing.JScrollPane();
         outputTextArea = new javax.swing.JTextArea();
-        jLabel1 = new javax.swing.JLabel();
+        outputLabel = new javax.swing.JLabel();
         flagTextField = new javax.swing.JTextField();
-        jPanel1 = new javax.swing.JPanel();
+        buttonPanel = new javax.swing.JPanel();
         deleteButton = new javax.swing.JButton();
         removeButton = new javax.swing.JButton();
         deleteAllButton = new javax.swing.JButton();
-        jLabel2 = new javax.swing.JLabel();
+        flagsLabel = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -122,18 +217,18 @@ public class Frame extends javax.swing.JFrame {
             }
         });
 
-        delList.setModel(lm);
-        jScrollPane1.setViewportView(delList);
+        recycleBinList.setModel(listModel);
+        listScrollPane.setViewportView(recycleBinList);
 
-        jProgressBar1.setModel(bmr);
+        progressBar.setModel(progressModel);
 
         outputTextArea.setEditable(false);
         outputTextArea.setColumns(20);
         outputTextArea.setRows(5);
-        jScrollPane2.setViewportView(outputTextArea);
+        outputScrollPane.setViewportView(outputTextArea);
 
-        jLabel1.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
-        jLabel1.setText("Output");
+        outputLabel.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        outputLabel.setText("Output");
 
         flagTextField.setText("-p 32 -s -c");
         flagTextField.addActionListener(new java.awt.event.ActionListener() {
@@ -163,11 +258,11 @@ public class Frame extends javax.swing.JFrame {
             }
         });
 
-        javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
-        jPanel1.setLayout(jPanel1Layout);
-        jPanel1Layout.setHorizontalGroup(
-            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel1Layout.createSequentialGroup()
+        javax.swing.GroupLayout buttonPanelLayout = new javax.swing.GroupLayout(buttonPanel);
+        buttonPanel.setLayout(buttonPanelLayout);
+        buttonPanelLayout.setHorizontalGroup(
+            buttonPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(buttonPanelLayout.createSequentialGroup()
                 .addContainerGap()
                 .addComponent(deleteButton)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
@@ -176,17 +271,17 @@ public class Frame extends javax.swing.JFrame {
                 .addComponent(deleteAllButton)
                 .addContainerGap())
         );
-        jPanel1Layout.setVerticalGroup(
-            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
+        buttonPanelLayout.setVerticalGroup(
+            buttonPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, buttonPanelLayout.createSequentialGroup()
                 .addGap(0, 4, Short.MAX_VALUE)
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addGroup(buttonPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(deleteButton)
                     .addComponent(removeButton)
                     .addComponent(deleteAllButton)))
         );
 
-        jLabel2.setText("Flags...");
+        flagsLabel.setText("Flags...");
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -195,13 +290,13 @@ public class Frame extends javax.swing.JFrame {
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jProgressBar1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 358, Short.MAX_VALUE)
-                    .addComponent(jScrollPane2, javax.swing.GroupLayout.Alignment.TRAILING)
-                    .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(progressBar, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(listScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 358, Short.MAX_VALUE)
+                    .addComponent(outputScrollPane, javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addComponent(outputLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(buttonPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                        .addComponent(jLabel2)
+                        .addComponent(flagsLabel)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(flagTextField)))
                 .addContainerGap())
@@ -210,19 +305,19 @@ public class Frame extends javax.swing.JFrame {
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 210, Short.MAX_VALUE)
+                .addComponent(listScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 210, Short.MAX_VALUE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(flagTextField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel2))
+                    .addComponent(flagsLabel))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(buttonPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jLabel1)
+                .addComponent(outputLabel)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 135, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(outputScrollPane, javax.swing.GroupLayout.PREFERRED_SIZE, 135, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(jProgressBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(progressBar, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap())
         );
 
@@ -234,12 +329,12 @@ public class Frame extends javax.swing.JFrame {
     }//GEN-LAST:event_flagTextFieldActionPerformed
 
     private void removeButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_removeButtonActionPerformed
-        rem(delList.getSelectedIndices());
+        rem(recycleBinList.getSelectedIndices());
     }//GEN-LAST:event_removeButtonActionPerformed
 
     private void deleteButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_deleteButtonActionPerformed
         applyFlags();
-        del(delList.getSelectedIndices());
+        del(recycleBinList.getSelectedIndices());
     }//GEN-LAST:event_deleteButtonActionPerformed
 
     private void deleteAllButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_deleteAllButtonActionPerformed
@@ -253,17 +348,17 @@ public class Frame extends javax.swing.JFrame {
 
     
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JList delList;
+    private javax.swing.JPanel buttonPanel;
     private javax.swing.JButton deleteAllButton;
     private javax.swing.JButton deleteButton;
     private javax.swing.JTextField flagTextField;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel2;
-    private javax.swing.JPanel jPanel1;
-    private javax.swing.JProgressBar jProgressBar1;
-    private javax.swing.JScrollPane jScrollPane1;
-    private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JLabel flagsLabel;
+    private javax.swing.JScrollPane listScrollPane;
+    private javax.swing.JLabel outputLabel;
+    private javax.swing.JScrollPane outputScrollPane;
     private javax.swing.JTextArea outputTextArea;
+    private javax.swing.JProgressBar progressBar;
+    private javax.swing.JList recycleBinList;
     private javax.swing.JButton removeButton;
     // End of variables declaration//GEN-END:variables
 }

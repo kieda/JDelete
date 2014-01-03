@@ -2,6 +2,7 @@ package kjl.jdelete.drivers;
 
 import kjl.jdelete.gui.Frame;
 import java.awt.EventQueue;
+import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
 /**
@@ -10,7 +11,6 @@ import javax.swing.UnsupportedLookAndFeelException;
  */
 public class Main {
     /**
-     * 
      * @param args takes no args
      */
     public static void main(String args[]) {
@@ -21,18 +21,15 @@ public class Main {
          * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
          */
         try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
                 //wow nimbus looks so great
                 if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    UIManager.setLookAndFeel(info.getClassName());
                     break;
                 }
             }
-        } catch (ClassNotFoundException ex) {
-        } catch (InstantiationException ex) {
-        } catch (IllegalAccessException ex) {
-        } catch (UnsupportedLookAndFeelException ex) {
-        }
+        } catch (ClassNotFoundException|InstantiationException
+                |IllegalAccessException|UnsupportedLookAndFeelException ex) {}
         //</editor-fold>
 
         /* Create and display the form */
